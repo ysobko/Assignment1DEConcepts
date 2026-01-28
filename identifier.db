@@ -1,0 +1,84 @@
+CREATE TABLE events_raw AS
+SELECT *
+FROM read_json_auto('/Users/yevheniiasobko/2015-01-01-15.json');
+
+
+SELECT * FROM events_raw;
+
+CREATE OR REPLACE TABLE events_structured AS
+SELECT
+  type,
+  actor.login        AS actor_login,
+  actor.id           AS actor_id,
+  repo.name          AS repo_name,
+  repo.url            AS repo_url,
+  repo.id             AS repo_id,
+  CAST(created_at AS TIMESTAMP) AS event_time,
+  payload
+FROM events_raw;
+
+SELECT * FROM events_structured;
+
+
+CREATE OR REPLACE TABLE event_commits AS
+SELECT
+  e.repo_url,
+  e.actor_login,
+  c.sha AS commit_sha
+FROM events_structured e
+CROSS JOIN UNNEST(payload.commits) AS t(c)
+WHERE payload.commits IS NOT NULL;
+
+SELECT * FROM event_commits;
+
+
+SELECT
+  repo_name,
+  COUNT(*) AS events_cnt,
+  ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) AS repo_rank
+FROM events_structured
+GROUP BY repo_name
+ORDER BY repo_rank
+LIMIT 10;
+
+
+SELECT
+  repo_name,
+  COUNT(*) AS commits_cnt
+FROM event_commits ec
+JOIN events_structured es
+  ON ec.repo_url = es.repo_url
+GROUP BY repo_name
+ORDER BY commits_cnt DESC
+LIMIT 10;
+
+
+WITH user_events AS (
+  SELECT
+    type,
+    actor_login,
+    COUNT(*) AS events_cnt
+  FROM events_structured
+  GROUP BY type, actor_login
+),
+ranked AS (
+  SELECT
+    type,
+    actor_login,
+    events_cnt,
+    ROW_NUMBER() OVER (
+      PARTITION BY type
+      ORDER BY events_cnt DESC
+    ) AS user_rank
+  FROM user_events
+)
+SELECT
+  type,
+  actor_login,
+  events_cnt,
+  user_rank
+FROM ranked
+WHERE user_rank <= 3
+ORDER BY type, user_rank;
+
+
