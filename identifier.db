@@ -42,17 +42,6 @@ ORDER BY repo_rank
 LIMIT 10;
 
 
-SELECT
-  repo_name,
-  COUNT(*) AS commits_cnt
-FROM event_commits ec
-JOIN events_structured es
-  ON ec.repo_url = es.repo_url
-GROUP BY repo_name
-ORDER BY commits_cnt DESC
-LIMIT 10;
-
-
 WITH user_events AS (
   SELECT
     type,
